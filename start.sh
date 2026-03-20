@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-# 1. Исправляем терминал, чтобы clear и цвета не ломали скрипт
+# Исправляем терминал для корректного отображения цветов
 export TERM=xterm
 
-# --- ЦВЕТА ---
+# --- ЦВЕТОВАЯ ПАЛИТРА ---
 NC='\033[0m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; 
 BLUE='\033[0;34m'; MAGENTA='\033[0;35m'; CYAN='\033[0;36m'; WHITE='\033[1;37m'
 
@@ -17,18 +17,17 @@ function log_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 function log_success() { echo -e "${GREEN}[OK]${NC} $1"; }
 
 # --- НАСТРОЙКИ ---
-GH_TOKEN="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"
 HF_TOKEN="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"
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 
-# Склад моделей
+# Ссылка на твой НОВЫЙ публичный репозиторий с нодами
+ALLNODES_REPO="https://github.com/depersonityhom/dep.git"
+
+# Склад моделей (Hugging Face)
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
 
-# Твой НОВЫЙ приватный репозиторий с нодами (используем токен в ссылке)
-ALLNODES_REPO="https://${GH_TOKEN}@github.com/depersonityhom/depersonity_wf.git"
-
-# --- МОДЕЛИ (WAN 2.2) ---
+# --- СПИСКИ МОДЕЛЕЙ (WAN 2.2) ---
 CLIP_MODELS=("$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
 CLIP_VISION_MODELS=("$MY_HF_REPO/clip_vision_h.safetensors")
 VAE_MODELS=("$MY_HF_REPO/wan_2.1_vae.safetensors")
@@ -45,32 +44,34 @@ function provisioning_get_files() {
     for url in "${files[@]}"; do
         local fname=$(basename $url)
         echo -e "${YELLOW}[DOWNLOADING]${NC} ${WHITE}$fname${NC}"
+        # Для Hugging Face всё еще нужен токен, так как репозиторий там приватный
         wget --header="Authorization: Bearer $HF_TOKEN" -q --show-progress -c --content-disposition -P "$dir" "$url"
         log_success "$fname готов."
     done
 }
 
-# --- ПОЕХАЛИ ---
+# --- ОСНОВНОЙ ПРОЦЕСС ---
 
-log_header "ШАГ 1: ПОДГОТОВКА ЯДРА COMFYUI"
+log_header "ШАГ 1: ПОДГОТОВКА ЯДРА"
 cd "${WORKSPACE}"
 if [[ ! -d "ComfyUI" ]]; then
-    log_info "Клонирую ядро..."
+    log_info "Клонирую свежее ядро ComfyUI..."
     git clone https://github.com/comfyanonymous/ComfyUI.git -q
 fi
 cd ComfyUI
 log_success "Ядро на месте."
 
-log_header "ШАГ 2: ПРИВАТНЫЕ НОДЫ (DEPERSONITY_WF)"
-log_info "Клонирую приватный репозиторий через токен..."
+log_header "ШАГ 2: УСТАНОВКА НОД (ПУБЛИЧНЫЙ РЕПО)"
+log_info "Загружаю ноды из $ALLNODES_REPO..."
 rm -rf custom_nodes/my_nodes
+# Клонируем без токена, так как репо публичный
 git clone --depth 1 "${ALLNODES_REPO}" custom_nodes/my_nodes -q
 
-log_info "Установка зависимостей (pip)..."
+log_info "Установка зависимостей (это может занять пару минут)..."
 find custom_nodes/my_nodes -name requirements.txt -exec pip install --no-cache-dir -r {} \; -q
-log_success "Ноды установлены."
+log_success "Ноды и зависимости настроены."
 
-log_header "ШАГ 3: ЗАГРУЗКА ВЕСОВ"
+log_header "ШАГ 3: ЗАГРУЗКА ТЯЖЕЛЫХ ВЕСОВ"
 provisioning_get_files "models/clip" "${CLIP_MODELS[@]}"
 provisioning_get_files "models/clip_vision" "${CLIP_VISION_MODELS[@]}"
 provisioning_get_files "models/vae" "${VAE_MODELS[@]}"
@@ -80,6 +81,7 @@ provisioning_get_files "models/detection" "${DETECTION_MODELS[@]}"
 provisioning_get_files "models/loras" "${LORAS[@]}"
 provisioning_get_files "models/upscale_models" "${UPSCALER_MODELS[@]}"
 
-log_header "ФИНАЛ: ЗАПУСК"
-echo -e "${GREEN}>>> ЗАПУСКАЮ COMFYUI НА ПОРТУ 18188 <<<${NC}"
+log_header "ФИНАЛ: ЗАПУСК СИСТЕМЫ"
+log_info "Запускаю сервер на порту 18188..."
+echo -e "${GREEN}>>> ВСЁ ГОТОВО. ОТКРЫВАЙ GUI ЧЕРЕЗ CONNECT <<<${NC}"
 python main.py --listen 0.0.0.0 --port 18188 --enable-cors-header
