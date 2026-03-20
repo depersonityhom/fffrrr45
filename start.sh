@@ -68,7 +68,7 @@ rm -rf custom_nodes/my_nodes
 git clone --depth 1 "${ALLNODES_REPO}" custom_nodes/my_nodes -q
 
 log_info "Установка зависимостей (это может занять пару минут)..."
-find custom_nodes/my_nodes -name requirements.txt -exec pip install --no-cache-dir -r {} \; -q
+find custom_nodes/my_nodes -name requirements.txt -exec pip install --no-cache-dir -r {} -q \;
 log_success "Ноды и зависимости настроены."
 
 log_header "ШАГ 3: ЗАГРУЗКА ТЯЖЕЛЫХ ВЕСОВ"
