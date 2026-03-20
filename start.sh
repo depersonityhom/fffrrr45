@@ -124,4 +124,4 @@ function provisioning_start() {
 provisioning_start
 
 log_step "STARTING COMFYUI"
-python main.py --listen 0.0.0.0 --port 8188
+python main.py --listen 0.0.0.0 --port 18188
