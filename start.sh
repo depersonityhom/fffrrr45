@@ -1,34 +1,26 @@
 #!/bin/bash
 set -e
 
-# Мы НЕ используем source /venv/..., так как в этом образе другой путь к Python
-# Просто идем дальше
-
 # --- ЦВЕТА ДЛЯ ЛОГОВ ---
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}==================================================${NC}"
-echo -e "${GREEN}    СКРИПТ ЗАПУЩЕН И РАБОТАЕТ!                  ${NC}"
+echo -e "${GREEN}    СКРИПТ ЗАПУЩЕН (VAST.AI COMFY MODE)         ${NC}"
 echo -e "${BLUE}==================================================${NC}"
 
-# Далее весь твой код...
-# --- ПЕРЕМЕННЫЕ (ТВОИ ДАННЫЕ) ---
+# --- ПЕРЕМЕННЫЕ ---
 GH_TOKEN="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"
 HF_TOKEN="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"
-
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
-
-# Твой основной репо с нодами (используем токен для доступа)
-ALLNODES_REPO="https://${GH_TOKEN}@github.com/depersonityhom/fffrrr45.git"
-ALLNODES_BRANCH="main"
-
-# Твой склад моделей
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
 
-# --- СПИСКИ МОДЕЛЕЙ (ПО КАТЕГОРИЯМ) ---
+# Репозиторий с твоими нодами
+ALLNODES_REPO="https://${GH_TOKEN}@github.com/depersonityhom/fffrrr45.git"
+
+# --- СПИСКИ МОДЕЛЕЙ ---
 CLIP_MODELS=("$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
 CLIP_VISION_MODELS=("$MY_HF_REPO/clip_vision_h.safetensors")
 VAE_MODELS=("$MY_HF_REPO/wan_2.1_vae.safetensors")
@@ -53,75 +45,59 @@ LORAS=(
     "$MY_HF_REPO/Wan21_PusaV1_LoRA_14B_rank512_bf16.safetensors"
 )
 
-# --- ФУНКЦИИ ЛОГИРОВАНИЯ ---
+# --- ФУНКЦИИ ---
 function log_step() {
     echo -e "\n\033[0;34m==================================================\033[0m"
     echo -e "\033[0;32m$1\033[0m"
     echo -e "\033[0;34m==================================================\033[0m"
 }
 
-# --- ФУНКЦИЯ ЗАГРУЗКИ (УЛУЧШЕННАЯ) ---
 function provisioning_get_files() {
     if [[ $# -lt 2 ]]; then return; fi
     local dir="$1"
     shift
     local files=("$@")
     mkdir -p "$dir"
-
     for url in "${files[@]}"; do
         local filename=$(basename "${url%%?*}")
-        echo -e "📥 Загрузка $filename в $dir..."
-        # Используем -c (continue) вместо -nc, чтобы докачивать битые файлы
+        echo -e "📥 Загрузка $filename..."
         wget --header="Authorization: Bearer $HF_TOKEN" -q --show-progress -c --content-disposition -P "$dir" "$url" || true
     done
 }
 
-# --- ФУНКЦИЯ УСТАНОВКИ НОД (КАК В ОРИГИНАЛЕ) ---
-function provisioning_get_nodes() {
-    local custom_nodes_dir="${COMFYUI_DIR}/custom_nodes"
-    cd "${COMFYUI_DIR}"
+# --- ОСНОВНОЙ ПРОЦЕСС ---
 
-    echo "Очистка старых нод..."
-    rm -rf "${custom_nodes_dir}"
-    mkdir -p "${custom_nodes_dir}"
+log_step "STEP 1: Проверка ядра ComfyUI"
+if [[ ! -d "${COMFYUI_DIR}" ]]; then
+    git clone https://github.com/comfyanonymous/ComfyUI.git "${COMFYUI_DIR}"
+fi
+cd "${COMFYUI_DIR}"
 
-    echo "Клонирование твоего основного репо нод: ${ALLNODES_REPO}"
-    # Клонируем содержимое твоего репо прямо в custom_nodes
-    git clone --depth 1 --branch "${ALLNODES_BRANCH}" "${ALLNODES_REPO}" "${custom_nodes_dir}/my_nodes"
+log_step "STEP 2: Обновление библиотек для Wan 2.2"
+# Обновляем самое важное, чтобы новые модели не выдавали ошибку
+pip install --no-cache-dir transformers accelerate diffusers --upgrade -q
+pip install --no-cache-dir -r requirements.txt -q
 
-    echo "Установка зависимостей для всех нод..."
-    find "${custom_nodes_dir}" -type f -name requirements.txt -exec pip install --no-cache-dir -r {} \; -q
-}
+log_step "STEP 3: Установка твоих нод"
+# Удаляем только ТВОЮ папку нод, если она была, а не всё подряд
+rm -rf custom_nodes/my_nodes
+git clone --depth 1 "${ALLNODES_REPO}" custom_nodes/my_nodes -q
 
-# --- ЗАПУСК ВСЕХ ШАГОВ ---
-function provisioning_start() {
-    log_step "STEP 1: Check ComfyUI Core"
-    if [[ ! -d "${COMFYUI_DIR}" ]]; then
-        git clone https://github.com/comfyanonymous/ComfyUI.git "${COMFYUI_DIR}"
-    fi
-    cd "${COMFYUI_DIR}"
+echo "Установка зависимостей для твоих нод..."
+find custom_nodes/my_nodes -type f -name requirements.txt -exec pip install --no-cache-dir -r {} \; -q
 
-    log_step "STEP 2: Install base requirements"
-    pip install --no-cache-dir -r requirements.txt -q
+log_step "STEP 4: Загрузка всех моделей"
+provisioning_get_files "models/clip" "${CLIP_MODELS[@]}"
+provisioning_get_files "models/clip_vision" "${CLIP_VISION_MODELS[@]}"
+provisioning_get_files "models/vae" "${VAE_MODELS[@]}"
+provisioning_get_files "models/controlnet" "${CONTROLNET_MODELS[@]}"
+provisioning_get_files "models/diffusion_models" "${DIFFUSION_MODELS[@]}"
+provisioning_get_files "models/detection" "${DETECTION_MODELS[@]}"
+provisioning_get_files "models/loras" "${LORAS[@]}"
+provisioning_get_files "models/upscale_models" "${UPSCALER_MODELS[@]}"
 
-    log_step "STEP 3: Install Custom Nodes"
-    provisioning_get_nodes
+log_step "PROVISIONING COMPLETE"
 
-    log_step "STEP 4: Download All Models"
-    provisioning_get_files "${COMFYUI_DIR}/models/clip" "${CLIP_MODELS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/clip_vision" "${CLIP_VISION_MODELS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/vae" "${VAE_MODELS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/controlnet" "${CONTROLNET_MODELS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/diffusion_models" "${DIFFUSION_MODELS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/detection" "${DETECTION_MODELS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/loras" "${LORAS[@]}"
-    provisioning_get_files "${COMFYUI_DIR}/models/upscale_models" "${UPSCALER_MODELS[@]}"
-
-    log_step "PROVISIONING COMPLETE"
-}
-
-# Запуск
-provisioning_start
-
-log_step "STARTING COMFYUI"
-python main.py --listen 0.0.0.0 --port 18188
+# Запуск на порту 18188 как в темплейте
+echo -e "${GREEN}Запускаю сервер на порту 18188...${NC}"
+python main.py --listen 0.0.0.0 --port 18188 --enable-cors-header
