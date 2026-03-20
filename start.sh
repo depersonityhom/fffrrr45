@@ -59,8 +59,8 @@ if [[ ! -d "ComfyUI" ]]; then
 fi
 cd ComfyUI
 
-# ФИКС: Убираем обновление pip и добавляем --break-system-packages
-log_info "Установка alembic и зависимостей ядра (forced)..."
+# ФИКС: УБРАЛИ обновление pip. Ставим зависимости с флагом --break-system-packages
+log_info "Установка alembic и зависимостей ядра..."
 python3 -m pip install --no-cache-dir -q -r requirements.txt --break-system-packages || python3 -m pip install --no-cache-dir -q -r requirements.txt
 python3 -m pip install --no-cache-dir -q alembic --break-system-packages || python3 -m pip install --no-cache-dir -q alembic
 
@@ -72,8 +72,7 @@ log_info "Загружаю ноды из репозитория 'dep'..."
 git clone --depth 1 "${ALLNODES_REPO}" custom_nodes/my_nodes -q
 
 log_info "Установка зависимостей нод..."
-# Добавляем флаг и сюда на всякий случай
-find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q --break-system-packages -r {} \; || \
+find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q --break-system-packages -r {} \; 2>/dev/null || \
 find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q -r {} \;
 
 log_ok "Ноды 'dep' успешно установлены."
@@ -83,7 +82,7 @@ download_compact
 log_ok "Все модели на месте."
 
 log_sep
-echo -e "${GREEN}  [READY] Система развернута. Удачной работы!${NC}"
+echo -e "${GREEN}  [READY] Система развернута. Константин, 5090 на взлете!${NC}"
 log_sep
 
 log_step "04" "ЗАПУСК СЕРВЕРА"
