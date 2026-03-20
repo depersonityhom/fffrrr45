@@ -22,7 +22,7 @@ COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 ALLNODES_REPO="https://github.com/depersonityhom/dep.git"
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
 
-# --- СПИСОК МОДЕЛЕЙ (Формат: папка|ссылка) ---
+# --- СПИСОК МОДЕЛЕЙ ---
 ALL_MODELS=(
     "models/clip|$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
     "models/clip_vision|$MY_HF_REPO/clip_vision_h.safetensors"
@@ -31,7 +31,7 @@ ALL_MODELS=(
     "models/controlnet|$MY_HF_REPO/Wan21_Uni3C_controlnet_fp16.safetensors"
 )
 
-# --- КОМПАКТНАЯ ФУНКЦИЯ ЗАГРУЗКИ ---
+# --- УТИЛИТА ЗАГРУЗКИ ---
 function download_compact() {
     local total=${#ALL_MODELS[@]}
     local current=0
@@ -40,10 +40,7 @@ function download_compact() {
         ((current++))
         local fname=$(basename "$url")
         mkdir -p "$target_dir"
-        
         echo -ne "${YELLOW}[📥] ($current/$total)${NC} Загрузка: ${WHITE}$fname${NC}..."
-        
-        # Используем curl в тихом режиме (-s), он надежнее wget с токенами
         if curl -L -s -H "Authorization: Bearer $HF_TOKEN" -o "$target_dir/$fname" "$url"; then
             echo -e " ${GREEN}[DONE]${NC}"
         else
@@ -52,7 +49,7 @@ function download_compact() {
     done
 }
 
-# --- ВЫПОЛНЕНИЕ ---
+# --- ПОЕХАЛИ ---
 
 log_step "01" "ПОДГОТОВКА ЯДРА И ЗАВИСИМОСТЕЙ"
 cd "${WORKSPACE}"
@@ -62,10 +59,11 @@ if [[ ! -d "ComfyUI" ]]; then
 fi
 cd ComfyUI
 
-log_info "Обновление pip и установка alembic..."
-python3 -m pip install --upgrade pip -q
-python3 -m pip install --no-cache-dir -q -r requirements.txt
-python3 -m pip install --no-cache-dir -q alembic
+# ФИКС: Убираем обновление pip и добавляем --break-system-packages
+log_info "Установка alembic и зависимостей ядра (forced)..."
+python3 -m pip install --no-cache-dir -q -r requirements.txt --break-system-packages || python3 -m pip install --no-cache-dir -q -r requirements.txt
+python3 -m pip install --no-cache-dir -q alembic --break-system-packages || python3 -m pip install --no-cache-dir -q alembic
+
 log_ok "Ядро и системные модули готовы."
 
 log_step "02" "УСТАНОВКА КАСТОМНЫХ НОД"
@@ -74,20 +72,21 @@ log_info "Загружаю ноды из репозитория 'dep'..."
 git clone --depth 1 "${ALLNODES_REPO}" custom_nodes/my_nodes -q
 
 log_info "Установка зависимостей нод..."
+# Добавляем флаг и сюда на всякий случай
+find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q --break-system-packages -r {} \; || \
 find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q -r {} \;
+
 log_ok "Ноды 'dep' успешно установлены."
 
-log_step "03" "ЗАГРУЗКА ВЕСОВ WAN 2.2 (ЧИСТЫЙ ЛОГ)"
+log_step "03" "ЗАГРУЗКА ВЕСОВ WAN 2.2"
 download_compact
 log_ok "Все модели на месте."
 
 log_sep
-echo -e "${GREEN}  [READY] Система развернута. Удачной работы, Константин!${NC}"
+echo -e "${GREEN}  [READY] Система развернута. Удачной работы!${NC}"
 log_sep
 
 log_step "04" "ЗАПУСК СЕРВЕРА"
-# Фикс для импорта comfy_aimdo
 export PYTHONPATH="${PYTHONPATH}:${COMFYUI_DIR}/custom_nodes/my_nodes"
-
 cd "${COMFYUI_DIR}"
 python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header
