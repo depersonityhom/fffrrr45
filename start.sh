@@ -1,7 +1,19 @@
 #!/bin/bash
 set -e
-source /venv/main/bin/activate
 
+# Мы НЕ используем source /venv/..., так как в этом образе другой путь к Python
+# Просто идем дальше
+
+# --- ЦВЕТА ДЛЯ ЛОГОВ ---
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}==================================================${NC}"
+echo -e "${GREEN}    СКРИПТ ЗАПУЩЕН И РАБОТАЕТ!                  ${NC}"
+echo -e "${BLUE}==================================================${NC}"
+
+# Далее весь твой код...
 # --- ПЕРЕМЕННЫЕ (ТВОИ ДАННЫЕ) ---
 GH_TOKEN="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"
 HF_TOKEN="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"
