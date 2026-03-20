@@ -15,7 +15,15 @@ function log_step() {
 function log_ok() { echo -e "${GREEN}[✔]${NC} $1"; }
 
 # --- НАСТРОЙКИ ---
-HF_TOKEN="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"
+# --- НАСТРОЙКИ ---
+# Теперь берем токен из переменной окружения Vast.ai
+# Если она не задана, используем пустую строку (но загрузка упадет с 401)
+HF_TOKEN="${HF_TOKEN}" 
+
+if [[ -z "$HF_TOKEN" ]]; then
+    echo -e "${RED}[!] ВНИМАНИЕ: Переменная HF_TOKEN не задана в настройках Vast.ai!${NC}"
+fi
+
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 ALLNODES_REPO="https://github.com/depersonityhom/dep.git"
