@@ -2,7 +2,7 @@
 set -e
 export TERM=xterm
 
-# --- ЦВЕТОВАЯ СХЕМА ---
+# --- ЦВЕТА ---
 NC='\033[0m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'; 
 MAGENTA='\033[1;35m'; CYAN='\033[1;36m'; WHITE='\033[1;37m'; GRAY='\033[0;90m'; RED='\033[1;31m'
 
@@ -12,14 +12,11 @@ function log_step() {
 }
 
 # --- НАСТРОЙКИ ---
-# Принудительно проверяем переменную из Vast.ai
 HF_TOKEN="${HF_TOKEN}" 
-
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
 
-# Список моделей (папка|ссылка)
 ALL_MODELS=(
     "models/clip|$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
     "models/clip_vision|$MY_HF_REPO/clip_vision_h.safetensors"
@@ -28,60 +25,57 @@ ALL_MODELS=(
     "models/controlnet|$MY_HF_REPO/Wan21_Uni3C_controlnet_fp16.safetensors"
 )
 
-# --- УТИЛИТА ЗАГРУЗКИ (УЛУЧШЕННАЯ) ---
-function download_compact() {
-    local total=${#ALL_MODELS[@]}
-    local current=0
-    
-    if [[ -z "$HF_TOKEN" ]]; then
-        echo -e "${RED}[✘] ОШИБКА: HF_TOKEN пустой! Проверь Docker Options в Vast.ai.${NC}"
-        # Для теста попробуем продолжить, вдруг репо публичный
-    else
-        echo -e "${GREEN}[✔] Токен обнаружен (начинается на ${HF_TOKEN:0:7}...)${NC}"
-    fi
+TOTAL_MODELS=${#ALL_MODELS[@]}
+CURRENT_INDEX=0
 
+function download_compact() {
     for entry in "${ALL_MODELS[@]}"; do
         IFS="|" read -r target_dir url <<< "$entry"
-        ((current++))
+        ((CURRENT_INDEX++))
         local fname=$(basename "$url")
         mkdir -p "$target_dir"
-        
-        if [[ -f "$target_dir/$fname" ]]; then
-            echo -e "${CYAN}[⚡] ($current/$total)${NC} ${WHITE}$fname${NC} уже на диске, пропускаю."
-            continue
-        fi
-
-        echo -ne "${YELLOW}[📥] ($current/$total)${NC} Загрузка: ${WHITE}$fname${NC}..."
-        
-        # -f заставит curl выдать ошибку, если токен не подошел
-        if curl -L -f -H "Authorization: Bearer $HF_TOKEN" -o "$target_dir/$fname" "$url" --progress-bar; then
+        echo -ne "${YELLOW}[📥] ($CURRENT_INDEX/$TOTAL_MODELS)${NC} Загрузка: ${WHITE}$fname${NC}..."
+        if curl -L -s -H "Authorization: Bearer $HF_TOKEN" -o "$target_dir/$fname" "$url"; then
             echo -e " ${GREEN}[DONE]${NC}"
         else
-            echo -e "\n${RED}[✘] ОШИБКА при загрузке $fname. Возможно, 401 Unauthorized.${NC}"
+            echo -e " ${RED}[FAILED]${NC}"
         fi
     done
 }
 
-# --- ПОЕХАЛИ ---
+# --- ПРОЦЕСС ---
 
-log_step "01" "ПОДГОТОВКА СИСТЕМЫ"
+log_step "01" "ПОДГОТОВКА ЯДРА И ЗАВИСИМОСТЕЙ"
 cd "${WORKSPACE}"
-if [[ ! -d "ComfyUI" ]]; then
-    git clone https://github.com/comfyanonymous/ComfyUI.git -q
+
+# Если папка есть, но она битая/чужая — лучше её пересоздать
+# Если хочешь сохранить данные, убери 'rm -rf ComfyUI'
+if [[ -d "ComfyUI" && ! -f "ComfyUI/main.py" ]]; then
+    rm -rf ComfyUI
 fi
+
+if [[ ! -d "ComfyUI" ]]; then
+    git clone https://github.com/comfyanonymous/ComfyUI.git
+fi
+
 cd ComfyUI
 
-# Ставим alembic (игнорируем ошибки pip)
-python3 -m pip install --no-cache-dir -q alembic --break-system-packages || true
+# КРИТИЧЕСКИЙ ШАГ: Установка зависимостей самого ComfyUI (включая alembic)
+echo -e "${CYAN}Установка базовых зависимостей ComfyUI...${NC}"
+python3 -m pip install --upgrade pip
+python3 -m pip install -r requirements.txt
 
-log_step "02" "НОДЫ"
-if [[ ! -d "custom_nodes/my_nodes" ]]; then
-    git clone --depth 1 https://github.com/depersonityhom/dep.git custom_nodes/my_nodes -q
-fi
+log_step "02" "УСТАНОВКА КАСТОМНЫХ НОД"
+# Твои ноды
+rm -rf custom_nodes/my_nodes
+git clone --depth 1 https://github.com/depersonityhom/dep.git custom_nodes/my_nodes -q
+# Установка зависимостей для всех нод
+find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -r {} \;
 
-log_step "03" "МОДЕЛИ"
+log_step "03" "ЗАГРУЗКА ВЕСОВ"
 download_compact
 
-log_step "04" "СТАРТ"
-export PYTHONPATH="${PYTHONPATH}:${COMFYUI_DIR}/custom_nodes/my_nodes"
+log_step "04" "ЗАПУСК СЕРВЕРА"
+echo -e "${GREEN}Все готово. Запуск...${NC}"
+# Добавляем --force-fp16 или другие флаги если нужно, но база:
 python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header
