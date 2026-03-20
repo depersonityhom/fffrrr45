@@ -24,7 +24,7 @@ function log_step() {
     log_sep
 }
 
-function log_info() { echo -e "${CYAL}[⚡]${NC} ${WHITE}$1${NC}"; }
+function log_info() { echo -e "${CYAN}[⚡]${NC} ${WHITE}$1${NC}"; }
 function log_ok() { echo -e "${GREEN}[✔]${NC} $1"; }
 function log_down() { echo -e "${YELLOW}[📥]${NC} Ожидание: ${WHITE}$1${NC}"; }
 
@@ -44,12 +44,13 @@ log_info "Disk Space: $(df -h /workspace | awk 'NR==2 {print $4}') available"
 log_sep
 
 # --- НАСТРОЙКИ ---
+HF_TOKEN="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"
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 ALLNODES_REPO="https://github.com/depersonityhom/dep.git"
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
 
-# --- СПИСКИ МОДЕЛЕЙ ---
+# --- МОДЕЛИ ---
 CLIP_MODELS=("$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors")
 CLIP_VISION_MODELS=("$MY_HF_REPO/clip_vision_h.safetensors")
 VAE_MODELS=("$MY_HF_REPO/wan_2.1_vae.safetensors")
@@ -66,7 +67,8 @@ function download_files() {
     for url in "${files[@]}"; do
         local fname=$(basename $url)
         log_down "$fname"
-        wget --show-progress -c --content-disposition -P "$dir" "$url" 2>&1 | grep -v 'saved'
+        # МЫ ВЕРНУЛИ АВТОРИЗАЦИЮ ЧЕРЕЗ ХЕДЕР
+        wget --header="Authorization: Bearer $HF_TOKEN" --show-progress -c --content-disposition -P "$dir" "$url"
         log_ok "$fname успешно загружен."
     done
 }
@@ -103,7 +105,7 @@ download_files "models/upscale_models" "${UPSCALER_MODELS[@]}"
 
 log_sep
 echo -e "${GREEN}  [SYSTEM READY] Код 0: Ошибок нет.${NC}"
-echo -e "${CYAN}  Доступ к ComfyUI: Порт 18188${NC}"
+echo -e "${CYAN}  Удачной генерации, Константин! Сервер на порту 18188.${NC}"
 log_sep
 
 log_step "04" "ЗАПУСК СЕРВЕРА"
