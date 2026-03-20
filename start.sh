@@ -22,7 +22,7 @@ COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 ALLNODES_REPO="https://github.com/depersonityhom/dep.git"
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
 
-# --- СПИСОК МОДЕЛЕЙ ---
+# --- СПИСОК МОДЕЛЕЙ (папка|ссылка) ---
 ALL_MODELS=(
     "models/clip|$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
     "models/clip_vision|$MY_HF_REPO/clip_vision_h.safetensors"
@@ -31,7 +31,7 @@ ALL_MODELS=(
     "models/controlnet|$MY_HF_REPO/Wan21_Uni3C_controlnet_fp16.safetensors"
 )
 
-# --- УТИЛИТА ЗАГРУЗКИ ---
+# --- УТИЛИТА ЗАГРУЗКИ (КОМПАКТНАЯ) ---
 function download_compact() {
     local total=${#ALL_MODELS[@]}
     local current=0
@@ -41,6 +41,7 @@ function download_compact() {
         local fname=$(basename "$url")
         mkdir -p "$target_dir"
         echo -ne "${YELLOW}[📥] ($current/$total)${NC} Загрузка: ${WHITE}$fname${NC}..."
+        # Качаем через curl (тихо)
         if curl -L -s -H "Authorization: Bearer $HF_TOKEN" -o "$target_dir/$fname" "$url"; then
             echo -e " ${GREEN}[DONE]${NC}"
         else
@@ -49,40 +50,35 @@ function download_compact() {
     done
 }
 
-# --- ПОЕХАЛИ ---
+# --- ВЫПОЛНЕНИЕ ---
 
-log_step "01" "ПОДГОТОВКА ЯДРА И ЗАВИСИМОСТЕЙ"
+log_step "01" "ЯДРО И СИСТЕМНЫЕ ПАКЕТЫ"
 cd "${WORKSPACE}"
 if [[ ! -d "ComfyUI" ]]; then
-    log_info "Клонирую чистое ядро ComfyUI..."
+    log_info "Клонирую ядро ComfyUI..."
     git clone https://github.com/comfyanonymous/ComfyUI.git -q
 fi
 cd ComfyUI
 
-# ФИКС: УБРАЛИ обновление pip. Ставим зависимости с флагом --break-system-packages
-log_info "Установка alembic и зависимостей ядра..."
-python3 -m pip install --no-cache-dir -q -r requirements.txt --break-system-packages || python3 -m pip install --no-cache-dir -q -r requirements.txt
-python3 -m pip install --no-cache-dir -q alembic --break-system-packages || python3 -m pip install --no-cache-dir -q alembic
+# ФИКС: Не трогаем pip, просто ставим alembic с игнором системных ограничений
+log_info "Установка alembic и зависимостей..."
+python3 -m pip install --no-cache-dir -q -r requirements.txt --break-system-packages || true
+python3 -m pip install --no-cache-dir -q alembic --break-system-packages || true
+log_ok "Система готова к работе."
 
-log_ok "Ядро и системные модули готовы."
-
-log_step "02" "УСТАНОВКА КАСТОМНЫХ НОД"
+log_step "02" "КАСТОМНЫЕ НОДЫ"
 rm -rf custom_nodes/my_nodes
-log_info "Загружаю ноды из репозитория 'dep'..."
 git clone --depth 1 "${ALLNODES_REPO}" custom_nodes/my_nodes -q
+# Ставим зависимости нод с флагом --break-system-packages, чтобы pip не ругался
+find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q --break-system-packages -r {} \; || true
+log_ok "Ноды 'dep' на месте."
 
-log_info "Установка зависимостей нод..."
-find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q --break-system-packages -r {} \; 2>/dev/null || \
-find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q -r {} \;
-
-log_ok "Ноды 'dep' успешно установлены."
-
-log_step "03" "ЗАГРУЗКА ВЕСОВ WAN 2.2"
+log_step "03" "ЗАГРУЗКА ВЕСОВ (ОСНОВНОЙ ЭТАП)"
 download_compact
-log_ok "Все модели на месте."
+log_ok "Все веса загружены."
 
 log_sep
-echo -e "${GREEN}  [READY] Система развернута. Константин, 5090 на взлете!${NC}"
+echo -e "${GREEN}  [READY] Система развернута. 5090 на взлете!${NC}"
 log_sep
 
 log_step "04" "ЗАПУСК СЕРВЕРА"
