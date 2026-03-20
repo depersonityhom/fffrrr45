@@ -24,7 +24,7 @@ log_info "Проверка GPU:"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader || echo "GPU не найден!"
 
 # --- НАСТРОЙКИ ---
-GH_TOKEN="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"
+GH_TOKEN="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"
 HF_TOKEN="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"
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
