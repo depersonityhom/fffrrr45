@@ -44,8 +44,8 @@ function provisioning_get_files() {
     for url in "${files[@]}"; do
         local fname=$(basename $url)
         echo -e "${YELLOW}[DOWNLOADING]${NC} ${WHITE}$fname${NC}"
-        # Для Hugging Face всё еще нужен токен, так как репозиторий там приватный
-        wget --header="Authorization: Bearer $HF_TOKEN" -q --show-progress -c --content-disposition -P "$dir" "$url"
+        # УДАЛИЛИ -q, чтобы видеть реальный прогресс в окне LOG
+        wget --header="Authorization: Bearer $HF_TOKEN" --show-progress -c --content-disposition -P "$dir" "$url"
         log_success "$fname готов."
     done
 }
