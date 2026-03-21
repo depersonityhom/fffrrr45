@@ -1,89 +1,129 @@
 #!/bin/bash
 set -e
-export TERM=xterm
 
-# --- ЦВЕТА ---
-NC='\033[0m'; GREEN='\033[1;32m'; YELLOW='\033[1;33m'; 
-MAGENTA='\033[1;35m'; CYAN='\033[1;36m'; WHITE='\033[1;37m'; GRAY='\033[0;90m'; RED='\033[1;31m'
-
-function log_step() {
-    echo -e "\n${MAGENTA}───[ STEP $1 ]──────────────────────────────────────────${NC}"
-    echo -e "${WHITE}  🚀 $2${NC}"
-}
-
-# --- НАСТРОЙКИ ---
-HF_TOKEN="${HF_TOKEN}"
+# --- НАСТРОЙКИ ОКРУЖЕНИЯ ---
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
-MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
+VENV_PATH="${WORKSPACE}/venv"
 
-ALL_MODELS=(
-    "models/clip|$MY_HF_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
-    "models/clip_vision|$MY_HF_REPO/clip_vision_h.safetensors"
-    "models/vae|$MY_HF_REPO/wan_2.1_vae.safetensors"
-    "models/diffusion_models|$MY_HF_REPO/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors"
-    "models/controlnet|$MY_HF_REPO/Wan21_Uni3C_controlnet_fp16.safetensors"
+# Создаем и активируем venv сразу
+if [[ ! -d "$VENV_PATH" ]]; then
+    python3 -m venv "$VENV_PATH"
+fi
+source "$VENV_PATH/bin/activate"
+
+# --- ТВОИ МОДЕЛИ И НОДЫ ---
+MY_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
+
+# Твой основной репозиторий с нодами (заменит стандартный)
+ALLNODES_REPO="https://github.com/depersonityhom/dep.git"
+ALLNODES_BRANCH="main"
+
+EXTRA_NODES=(
+    "https://github.com/PozzettiAndrea/ComfyUI-SAM3"
 )
 
-TOTAL_MODELS=${#ALL_MODELS[@]}
-CURRENT_INDEX=0
+CLIP_MODELS=(
+    "$MY_REPO/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+)
 
-function download_compact() {
-    for entry in "${ALL_MODELS[@]}"; do
-        IFS="|" read -r target_dir url <<< "$entry"
-        ((CURRENT_INDEX++))
+CLIP_VISION_MODELS=(
+    "$MY_REPO/clip_vision_h.safetensors"
+)
+
+VAE_MODELS=(
+    "$MY_REPO/wan_2.1_vae.safetensors"
+)
+
+DIFFUSION_MODELS=(
+    "$MY_REPO/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors"
+)
+
+CONTROLNET_MODELS=(
+    "$MY_REPO/Wan21_Uni3C_controlnet_fp16.safetensors"
+)
+
+# --- ФУНКЦИИ (Твоя оригинальная логика) ---
+
+function log_step() {
+    echo -e "\n=================================================="
+    echo -e "🚀 $1"
+    echo -e "=================================================="
+}
+
+function provisioning_start() {
+    log_step "STEP 1: Clone/Verify ComfyUI"
+    provisioning_clone_comfyui
+
+    log_step "STEP 2: Install base requirements"
+    provisioning_install_base_reqs
+
+    log_step "STEP 3: Install custom nodes"
+    provisioning_get_nodes
+
+    log_step "STEP 4: Download models (Wan 2.1)"
+    provisioning_get_files "${COMFYUI_DIR}/models/clip" "${CLIP_MODELS[@]}"
+    provisioning_get_files "${COMFYUI_DIR}/models/clip_vision" "${CLIP_VISION_MODELS[@]}"
+    provisioning_get_files "${COMFYUI_DIR}/models/vae" "${VAE_MODELS[@]}"
+    provisioning_get_files "${COMFYUI_DIR}/models/diffusion_models" "${DIFFUSION_MODELS[@]}"
+    provisioning_get_files "${COMFYUI_DIR}/models/controlnet" "${CONTROLNET_MODELS[@]}"
+
+    log_step "PROVISIONING COMPLETE"
+}
+
+function provisioning_clone_comfyui() {
+    if [[ ! -d "${COMFYUI_DIR}" ]]; then
+        git clone https://github.com/comfyanonymous/ComfyUI.git "${COMFYUI_DIR}"
+    fi
+    cd "${COMFYUI_DIR}"
+}
+
+function provisioning_install_base_reqs() {
+    pip install --upgrade pip
+    pip install --no-cache-dir -r requirements.txt
+}
+
+function provisioning_get_nodes() {
+    local nodes_dir="${COMFYUI_DIR}/custom_nodes"
+    
+    # Очистка и установка твоего основного репо 'dep'
+    rm -rf "${nodes_dir}/my_nodes"
+    git clone --depth 1 --branch "${ALLNODES_BRANCH}" "${ALLNODES_REPO}" "${nodes_dir}/my_nodes"
+
+    # Дополнительные ноды
+    for repo in "${EXTRA_NODES[@]}"; do
+        local name="${repo##*/}"
+        if [[ ! -d "${nodes_dir}/${name}" ]]; then
+            git clone --depth 1 "${repo}" "${nodes_dir}/${name}" || true
+        fi
+    done
+
+    # Установка зависимостей для всех нод
+    find "${nodes_dir}" -maxdepth 2 -name requirements.txt -exec pip install --no-cache-dir -r {} \;
+}
+
+function provisioning_get_files() {
+    local dir="$1"
+    shift
+    local files=("$@")
+    mkdir -p "$dir"
+
+    for url in "${files[@]}"; do
         local fname=$(basename "$url")
-        mkdir -p "$target_dir"
-        
-        # ПРОВЕРКА: Если файл уже есть, не качаем его снова
-        if [[ -f "$target_dir/$fname" ]]; then
-            echo -e "${CYAN}[✔] ($CURRENT_INDEX/$TOTAL_MODELS)${NC} ${WHITE}$fname${NC} уже на месте."
+        if [[ -f "$dir/$fname" ]]; then
+            echo "Skipping: $fname already exists."
             continue
         fi
 
-        echo -ne "${YELLOW}[📥] ($CURRENT_INDEX/$TOTAL_MODELS)${NC} Загрузка: ${WHITE}$fname${NC}..."
-        if curl -L -s -H "Authorization: Bearer $HF_TOKEN" -o "$target_dir/$fname" "$url"; then
-            echo -e " ${GREEN}[DONE]${NC}"
-        else
-            echo -e " ${RED}[FAILED]${NC}"
-        fi
+        echo "Downloading $fname to $dir"
+        # Используем wget с заголовком авторизации для Hugging Face
+        wget --header="Authorization: Bearer $HF_TOKEN" -nc --content-disposition -P "$dir" "$url" || true
     done
 }
 
-# --- ПРОЦЕСС ---
+# --- ЗАПУСК ---
+provisioning_start
 
-log_step "01" "ЧИСТКА И УСТАНОВКА ЯДРА"
-cd "${WORKSPACE}"
-
-# Если main.py содержит левые импорты (comfy_aimdo), сносим папку и ставим чистый Comfy
-if [[ -d "ComfyUI" ]]; then
-    if grep -q "comfy_aimdo" ComfyUI/main.py; then
-        echo -e "${YELLOW}Обнаружена модифицированная версия ComfyUI. Переустанавливаю на оригинал...${NC}"
-        rm -rf ComfyUI
-    fi
-fi
-
-if [[ ! -d "ComfyUI" ]]; then
-    git clone https://github.com/comfyanonymous/ComfyUI.git -q
-fi
-cd ComfyUI
-
-# Установка зависимостей самого ComfyUI (это пофиксит ошибку alembic)
-echo -e "${CYAN}Обновление зависимостей (alembic и др.)...${NC}"
-python3 -m pip install --upgrade pip -q
-python3 -m pip install -r requirements.txt -q
-
-log_step "02" "ОБНОВЛЕНИЕ КАСТОМНЫХ НОД"
-# Удаляем старую версию твоих нод и качаем свежую
-rm -rf custom_nodes/my_nodes
-git clone --depth 1 https://github.com/depersonityhom/dep.git custom_nodes/my_nodes -q
-# Ставим зависимости для твоих нод
-find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q -r {} \;
-
-log_step "03" "ПРОВЕРКА ВЕСОВ (Wan 2.1)"
-# Теперь функция проверит наличие файлов перед загрузкой
-download_compact
-
-log_step "04" "ЗАПУСК"
-echo -e "${GREEN}Все готово. Погнали!${NC}"
+cd "${COMFYUI_DIR}"
+# Запуск через venv python
 python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header
