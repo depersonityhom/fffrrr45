@@ -12,7 +12,7 @@ function log_step() {
 }
 
 # --- НАСТРОЙКИ ---
-HF_TOKEN="${HF_TOKEN}" 
+HF_TOKEN="${HF_TOKEN}"
 WORKSPACE="/workspace"
 COMFYUI_DIR="${WORKSPACE}/ComfyUI"
 MY_HF_REPO="https://huggingface.co/depersonity/wf_local/resolve/main"
@@ -34,6 +34,13 @@ function download_compact() {
         ((CURRENT_INDEX++))
         local fname=$(basename "$url")
         mkdir -p "$target_dir"
+        
+        # ПРОВЕРКА: Если файл уже есть, не качаем его снова
+        if [[ -f "$target_dir/$fname" ]]; then
+            echo -e "${CYAN}[✔] ($CURRENT_INDEX/$TOTAL_MODELS)${NC} ${WHITE}$fname${NC} уже на месте."
+            continue
+        fi
+
         echo -ne "${YELLOW}[📥] ($CURRENT_INDEX/$TOTAL_MODELS)${NC} Загрузка: ${WHITE}$fname${NC}..."
         if curl -L -s -H "Authorization: Bearer $HF_TOKEN" -o "$target_dir/$fname" "$url"; then
             echo -e " ${GREEN}[DONE]${NC}"
@@ -45,37 +52,38 @@ function download_compact() {
 
 # --- ПРОЦЕСС ---
 
-log_step "01" "ПОДГОТОВКА ЯДРА И ЗАВИСИМОСТЕЙ"
+log_step "01" "ЧИСТКА И УСТАНОВКА ЯДРА"
 cd "${WORKSPACE}"
 
-# Если папка есть, но она битая/чужая — лучше её пересоздать
-# Если хочешь сохранить данные, убери 'rm -rf ComfyUI'
-if [[ -d "ComfyUI" && ! -f "ComfyUI/main.py" ]]; then
-    rm -rf ComfyUI
+# Если main.py содержит левые импорты (comfy_aimdo), сносим папку и ставим чистый Comfy
+if [[ -d "ComfyUI" ]]; then
+    if grep -q "comfy_aimdo" ComfyUI/main.py; then
+        echo -e "${YELLOW}Обнаружена модифицированная версия ComfyUI. Переустанавливаю на оригинал...${NC}"
+        rm -rf ComfyUI
+    fi
 fi
 
 if [[ ! -d "ComfyUI" ]]; then
-    git clone https://github.com/comfyanonymous/ComfyUI.git
+    git clone https://github.com/comfyanonymous/ComfyUI.git -q
 fi
-
 cd ComfyUI
 
-# КРИТИЧЕСКИЙ ШАГ: Установка зависимостей самого ComfyUI (включая alembic)
-echo -e "${CYAN}Установка базовых зависимостей ComfyUI...${NC}"
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+# Установка зависимостей самого ComfyUI (это пофиксит ошибку alembic)
+echo -e "${CYAN}Обновление зависимостей (alembic и др.)...${NC}"
+python3 -m pip install --upgrade pip -q
+python3 -m pip install -r requirements.txt -q
 
-log_step "02" "УСТАНОВКА КАСТОМНЫХ НОД"
-# Твои ноды
+log_step "02" "ОБНОВЛЕНИЕ КАСТОМНЫХ НОД"
+# Удаляем старую версию твоих нод и качаем свежую
 rm -rf custom_nodes/my_nodes
 git clone --depth 1 https://github.com/depersonityhom/dep.git custom_nodes/my_nodes -q
-# Установка зависимостей для всех нод
-find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -r {} \;
+# Ставим зависимости для твоих нод
+find custom_nodes/my_nodes -name requirements.txt -exec python3 -m pip install --no-cache-dir -q -r {} \;
 
-log_step "03" "ЗАГРУЗКА ВЕСОВ"
+log_step "03" "ПРОВЕРКА ВЕСОВ (Wan 2.1)"
+# Теперь функция проверит наличие файлов перед загрузкой
 download_compact
 
-log_step "04" "ЗАПУСК СЕРВЕРА"
-echo -e "${GREEN}Все готово. Запуск...${NC}"
-# Добавляем --force-fp16 или другие флаги если нужно, но база:
+log_step "04" "ЗАПУСК"
+echo -e "${GREEN}Все готово. Погнали!${NC}"
 python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header
