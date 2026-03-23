@@ -185,7 +185,7 @@ download_resource "models/upscale_models" "$MY_REPO_URL/005_colorDN_DFWB_s128w8_
 # Прочее (если понадобится)
 download_resource "models/promptmodels" "$MY_REPO_URL/low.pt" "promptmodels low.pt"
 
-echo -e \"${YELLOW}Важно:${NC} CodeFormer model (codeformer.pth) в hf-репозитории wf_local не найден. Его нужно положить вручную в ${COMFYUI_DIR}/models/facerestore_models/codeformer.pth\"
+echo -e "${YELLOW}Важно:${NC} CodeFormer model (codeformer.pth) в hf-репозитории wf_local не найден. Его нужно положить вручную в ${COMFYUI_DIR}/models/facerestore_models/codeformer.pth"
 
 log_step "06" "СТАРТ"
 echo -e "${GREEN}✨ Все файлы из репозитория успешно перенесены в custom_nodes.${NC}"
