@@ -47,7 +47,11 @@ function download_resource() {
         echo -e "${GRAY}[✔] $desc${NC}"
     else
         echo -ne "${YELLOW}[📥]${NC} $desc..."
-        wget --header="Authorization: Bearer $HF_TOKEN" -q --show-progress=off -nc --content-disposition -P "$dir" "$url"
+        if [[ -n "$HF_TOKEN" ]]; then
+            wget --header="Authorization: Bearer $HF_TOKEN" -q --show-progress=off -nc --content-disposition -P "$dir" "$url"
+        else
+            wget -q --show-progress=off -nc --content-disposition -P "$dir" "$url"
+        fi
         echo -e " ${GREEN}[OK]${NC}"
     fi
 }
@@ -142,12 +146,43 @@ for repo in "${EXTRA_NODES[@]}"; do
     fi
 done
 
-log_step "05" "ПРОВЕРКА МОДЕЛЕЙ (WAN 2.1)"
-download_resource "models/clip" "$MY_REPO_URL/umt5_xxl_fp8_e4m3fn_scaled.safetensors" "CLIP (Text)"
+log_step "05" "МОДЕЛИ (Depersonity/wf_local)"
+# WanVideo wrapper читает модели из:
+# - models/diffusion_models (основная модель)
+# - models/vae
+# - models/text_encoders (UMT5)
+# - models/clip_vision
+# - models/controlnet
+# - models/loras
+# WanAnimate preprocess читает из models/detection
+# TS utils denoise читает из models/upscale_models
+# Face restore читает из models/facerestore_models
+
+# Основные модели WanVideo
+download_resource "models/text_encoders" "$MY_REPO_URL/umt5_xxl_fp8_e4m3fn_scaled.safetensors" "UMT5 (text encoder)"
 download_resource "models/clip_vision" "$MY_REPO_URL/clip_vision_h.safetensors" "CLIP Vision"
-download_resource "models/vae" "$MY_REPO_URL/wan_2.1_vae.safetensors" "VAE"
-download_resource "models/diffusion_models" "$MY_REPO_URL/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors" "Main Model"
-download_resource "models/controlnet" "$MY_REPO_URL/Wan21_Uni3C_controlnet_fp16.safetensors" "ControlNet"
+download_resource "models/vae" "$MY_REPO_URL/wan_2.1_vae.safetensors" "Wan VAE"
+download_resource "models/diffusion_models" "$MY_REPO_URL/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors" "Wan main model"
+download_resource "models/controlnet" "$MY_REPO_URL/Wan21_Uni3C_controlnet_fp16.safetensors" "Uni3C ControlNet"
+
+# LoRA (кладём в models/loras)
+download_resource "models/loras" "$MY_REPO_URL/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors" "LoRA: distill (lightx2v)"
+download_resource "models/loras" "$MY_REPO_URL/wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors" "LoRA: 4steps high-noise"
+download_resource "models/loras" "$MY_REPO_URL/Wan21_PusaV1_LoRA_14B_rank512_bf16.safetensors" "LoRA: PusaV1"
+download_resource "models/loras" "$MY_REPO_URL/Wan2.2-Fun-A14B-InP-low-noise-HPS2.1.safetensors" "LoRA: low-noise"
+
+# Детекторы для pose/face preprocess (models/detection)
+download_resource "models/detection" "$MY_REPO_URL/vitpose_h_wholebody_model.onnx" "ViTPose wholebody (onnx)"
+download_resource "models/detection" "$MY_REPO_URL/vitpose_h_wholebody_data.bin" "ViTPose data (bin)"
+download_resource "models/detection" "$MY_REPO_URL/yolov10m.onnx" "YOLOv10m (onnx)"
+
+# Denoise модель (SwinIR) для TSDenoise (models/upscale_models)
+download_resource "models/upscale_models" "$MY_REPO_URL/005_colorDN_DFWB_s128w8_SwinIR-M_noise15.pth" "SwinIR denoise (noise15)"
+
+# Прочее (если понадобится)
+download_resource "models/promptmodels" "$MY_REPO_URL/low.pt" "promptmodels low.pt"
+
+echo -e \"${YELLOW}Важно:${NC} CodeFormer model (codeformer.pth) в hf-репозитории wf_local не найден. Его нужно положить вручную в ${COMFYUI_DIR}/models/facerestore_models/codeformer.pth\"
 
 log_step "06" "СТАРТ"
 echo -e "${GREEN}✨ Все файлы из репозитория успешно перенесены в custom_nodes.${NC}"
