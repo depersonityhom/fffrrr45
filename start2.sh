@@ -73,52 +73,56 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 status_ok
 
-log_step "03" "СИНХРОНИЗАЦИЯ ТЕСТОВОГО КОНТЕНТА"
+log_step "03" "СИНХРОНИЗАЦИЯ REPO -> CUSTOM_NODES"
 nodes_dir="${COMFYUI_DIR}/custom_nodes"
 workflow_dir="${COMFYUI_DIR}/user/default/workflows"
-temp_dep="/tmp/dep_test_repo"
+temp_repo="/tmp/dep_test_repo"
 
+mkdir -p "$nodes_dir"
 mkdir -p "$workflow_dir"
 
-status_msg "Клонирование репозитория $DEP_NODES_REPO"
-rm -rf "$temp_dep"
-git clone --depth 1 "$DEP_NODES_REPO" "$temp_dep" -q
+status_msg "Получение данных из $DEP_NODES_REPO"
+rm -rf "$temp_repo"
+git clone --depth 1 "$DEP_NODES_REPO" "$temp_repo" -q
 status_ok
 
-status_msg "Распределение файлов (ноды и воркфлоу)"
-# 1. Копируем все папки (ноды) в custom_nodes
-find "$temp_dep" -maxdepth 1 -mindepth 1 -type d ! -name ".git" -exec cp -r {} "$nodes_dir/" \;
+status_msg "Прямое копирование содержимого"
+# Копируем всё из корня репо прямо в custom_nodes
+cp -rf "$temp_repo"/* "$nodes_dir/" 2>/dev/null || true
 
-# 2. Копируем все JSON файлы (воркфлоу) в папку воркфлоу
-find "$temp_dep" -maxdepth 1 -name "*.json" -exec cp {} "$workflow_dir/" \;
+# Если в репозитории были JSON-воркфлоу, дублируем их в папку воркфлоу для удобства
+find "$temp_repo" -maxdepth 1 -name "*.json" -exec cp {} "$workflow_dir/" \; 2>/dev/null || true
 
-# 3. Если в корне репо есть requirements.txt, ставим его
-if [[ -f "$temp_dep/requirements.txt" ]]; then
-    pip install -q --no-cache-dir -r "$temp_dep/requirements.txt"
+# Установка requirements из корня твоего репо, если он есть
+if [[ -f "$temp_repo/requirements.txt" ]]; then
+    pip install -q --no-cache-dir -r "$temp_repo/requirements.txt"
 fi
+
+# Чистим временные данные git, чтобы не засорять ComfyUI
+rm -rf "$nodes_dir/.git"
 status_ok
 
-status_msg "Установка дополнительных расширений"
+log_step "04" "УСТАНОВКА ДОП. РАСШИРЕНИЙ"
 for repo in "${EXTRA_NODES[@]}"; do
     name="${repo##*/}"
-    [[ ! -d "${nodes_dir}/${name}" ]] && git clone --depth 1 "${repo}" "${nodes_dir}/${name}" -q || true
+    if [[ ! -d "${nodes_dir}/${name}" ]]; then
+        status_msg "Загрузка $name"
+        git clone --depth 1 "${repo}" "${nodes_dir}/${name}" -q
+        [[ -f "${nodes_dir}/${name}/requirements.txt" ]] && pip install -q --no-cache-dir -r "${nodes_dir}/${name}/requirements.txt"
+        status_ok
+    fi
 done
-status_ok
 
-status_msg "Конфигурация библиотек внутри нод"
-find "${nodes_dir}" -maxdepth 2 -name requirements.txt -exec pip install -q --no-cache-dir -r {} \;
-status_ok
-
-log_step "04" "ПРОВЕРКА РЕСУРСОВ (WAN 2.1)"
+log_step "05" "ПРОВЕРКА РЕСУРСОВ (WAN 2.1)"
 download_resource "models/clip" "$MY_REPO_URL/umt5_xxl_fp8_e4m3fn_scaled.safetensors" "Текстовый энкодер"
 download_resource "models/clip_vision" "$MY_REPO_URL/clip_vision_h.safetensors" "Зрительный энкодер"
 download_resource "models/vae" "$MY_REPO_URL/wan_2.1_vae.safetensors" "Видеотехнология (VAE)"
 download_resource "models/diffusion_models" "$MY_REPO_URL/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors" "Основная модель генерации"
 download_resource "models/controlnet" "$MY_REPO_URL/Wan21_Uni3C_controlnet_fp16.safetensors" "Модуль управления"
 
-log_step "05" "ЗАПУСК"
-echo -e "${GREEN}✨ Все ресурсы из репозитория адаптированы и загружены!${NC}"
-echo -e "${CYAN}📁 Воркфлоу ищи в меню Load -> user/default/workflows${NC}"
+log_step "06" "ЗАПУСК"
+echo -e "${GREEN}✨ Репозиторий развернут напрямую в custom_nodes.${NC}"
+echo -e "${CYAN}🚀 Все изменения из GitHub применены. Погнали!${NC}"
 echo -e "${GRAY}------------------------------------------------------------${NC}"
 
 exec 2>&3
