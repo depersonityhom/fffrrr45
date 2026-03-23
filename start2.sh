@@ -187,7 +187,15 @@ echo -e \"${YELLOW}Важно:${NC} CodeFormer model (codeformer.pth) в hf-ре
 log_step "06" "СТАРТ"
 echo -e "${GREEN}✨ Все файлы из репозитория успешно перенесены в custom_nodes.${NC}"
 echo -e "${GRAY}------------------------------------------------------------${NC}"
+echo -e "${YELLOW}ComfyUI будет запущен как сервер и скрипт будет \"висеть\" пока сервер работает — это нормально.${NC}"
+echo -e "${YELLOW}GUI откроется по адресу: http://0.0.0.0:8188${NC}"
+echo -e "${GRAY}Если хочешь запустить в фоне и вернуть контроль терминала: RUN_IN_BACKGROUND=1 ./setup.sh${NC}"
 
 # Возвращаем ошибки в консоль
 exec 2>&3
-python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header --enable-manager
+if [[ "${RUN_IN_BACKGROUND:-0}" == "1" ]]; then
+    nohup python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header --enable-manager > "${WORKSPACE}/comfyui.log" 2>&1 &
+    echo -e "${GREEN}✅ ComfyUI запущен в фоне. Логи: ${WORKSPACE}/comfyui.log${NC}"
+else
+    python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header --enable-manager
+fi
