@@ -79,7 +79,6 @@ log_step "03" "СИНХРОНИЗАЦИЯ ТВОИХ НОД (DEPERSONITY)"
 nodes_dir="${COMFYUI_DIR}/custom_nodes"
 workflow_dir="${COMFYUI_DIR}/user/default/workflows"
 temp_repo="/tmp/dep_test_repo"
-bundle_dir="${nodes_dir}/Depersonity"
 
 mkdir -p "$workflow_dir"
 
@@ -88,21 +87,46 @@ rm -rf "$temp_repo"
 git clone --depth 1 "$DEP_NODES_REPO" "$temp_repo" -q
 status_ok
 
-status_msg "Установка в custom_nodes/Depersonity"
-rm -rf "$bundle_dir"
+status_msg "Установка нод в custom_nodes (каждая папка отдельно)"
 mkdir -p "$nodes_dir"
-cp -rf "$temp_repo" "$bundle_dir" 2>/dev/null || true
+
+# Ставим как отдельные custom_nodes директории (так ComfyUI подхватывает WEB_DIRECTORY и JS-расширения)
+DEP_NODE_DIRS=(
+    "ComfyUI-Manager"
+    "depersonity-lora-scheduler"
+    "depersonity-kjnodes"
+    "depersonity-sam2-segmentation"
+    "depersonity-zmg-nodes"
+    "depersonity-wanvideo-wrapper"
+    "depersonity-wananimate-preprocess"
+    "depersonity-videohelpersuite"
+    "depersonity-ts-utils"
+    "depersonity-liveportrait"
+    "depersonity-impact-pack"
+    "depersonity-facerestore-cf"
+)
+
+for d in "${DEP_NODE_DIRS[@]}"; do
+    if [[ -d "$temp_repo/$d" ]]; then
+        rm -rf "$nodes_dir/$d"
+        cp -rf "$temp_repo/$d" "$nodes_dir/$d" 2>/dev/null || true
+        rm -rf "$nodes_dir/$d/.git" 2>/dev/null || true
+    fi
+done
+
+# Доп. python-скрипты (если есть)
+if [[ -f "$temp_repo/websocket_image_save.py" ]]; then
+    cp -f "$temp_repo/websocket_image_save.py" "$nodes_dir/websocket_image_save.py" 2>/dev/null || true
+fi
 
 # Копируем JSON в workflows для удобства запуска
 find "$temp_repo" -maxdepth 1 -name "*.json" -exec cp {} "$workflow_dir/" \; 2>/dev/null || true
+find "$temp_repo/lite_version" -maxdepth 1 -name "*.json" -exec cp {} "$workflow_dir/" \; 2>/dev/null || true
 
 # Установка зависимостей всех включенных нод
 while IFS= read -r -d '' req; do
     pip install -q --no-cache-dir -r "$req" || true
-done < <(find "$bundle_dir" -type f -name "requirements.txt" -print0)
-
-# Удаляем следы git из custom_nodes, чтобы не было конфликтов
-rm -rf "$bundle_dir/.git"
+done < <(find "$nodes_dir" -maxdepth 2 -type f -name "requirements.txt" -print0)
 status_ok
 
 log_step "04" "ДОПОЛНИТЕЛЬНЫЕ РАСШИРЕНИЯ"
