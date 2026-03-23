@@ -1,4 +1,7 @@
 #!/bin/bash
+if [[ -z "${BASH_VERSION:-}" ]]; then
+    exec /usr/bin/env bash "$0" "$@"
+fi
 set -e
 export TERM=xterm
 # Глушим лишние вопросы от Git
