@@ -79,6 +79,7 @@ log_step "03" "СИНХРОНИЗАЦИЯ ТВОИХ НОД (DEPERSONITY)"
 nodes_dir="${COMFYUI_DIR}/custom_nodes"
 workflow_dir="${COMFYUI_DIR}/user/default/workflows"
 temp_repo="/tmp/dep_test_repo"
+bundle_dir="${nodes_dir}/Depersonity"
 
 mkdir -p "$workflow_dir"
 
@@ -87,20 +88,21 @@ rm -rf "$temp_repo"
 git clone --depth 1 "$DEP_NODES_REPO" "$temp_repo" -q
 status_ok
 
-status_msg "Копирование файлов напрямую в custom_nodes"
-# Копируем всё содержимое репо в корень custom_nodes
-cp -rf "$temp_repo"/* "$nodes_dir/" 2>/dev/null || true
+status_msg "Установка в custom_nodes/Depersonity"
+rm -rf "$bundle_dir"
+mkdir -p "$nodes_dir"
+cp -rf "$temp_repo" "$bundle_dir" 2>/dev/null || true
 
 # Копируем JSON в workflows для удобства запуска
 find "$temp_repo" -maxdepth 1 -name "*.json" -exec cp {} "$workflow_dir/" \; 2>/dev/null || true
 
-# Установка зависимостей из твоего репозитория
-if [[ -f "$temp_repo/requirements.txt" ]]; then
-    pip install -q --no-cache-dir -r "$temp_repo/requirements.txt"
-fi
+# Установка зависимостей всех включенных нод
+while IFS= read -r -d '' req; do
+    pip install -q --no-cache-dir -r "$req" || true
+done < <(find "$bundle_dir" -type f -name "requirements.txt" -print0)
 
 # Удаляем следы git из custom_nodes, чтобы не было конфликтов
-rm -rf "$nodes_dir/.git"
+rm -rf "$bundle_dir/.git"
 status_ok
 
 log_step "04" "ДОПОЛНИТЕЛЬНЫЕ РАСШИРЕНИЯ"
