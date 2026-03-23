@@ -73,6 +73,8 @@ cd "${COMFYUI_DIR}"
 status_msg "Установка зависимостей ядра"
 pip install --upgrade pip -q
 pip install -r requirements.txt -q
+# Node Manager для полного UI
+pip install -U --pre comfyui-manager -q || true
 status_ok
 
 log_step "03" "СИНХРОНИЗАЦИЯ ТВОИХ НОД (DEPERSONITY)"
@@ -153,4 +155,4 @@ echo -e "${GRAY}------------------------------------------------------------${NC
 
 # Возвращаем ошибки в консоль
 exec 2>&3
-python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header
+python3 main.py --listen 0.0.0.0 --port 8188 --enable-cors-header --enable-manager
